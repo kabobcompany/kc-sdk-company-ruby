@@ -1,0 +1,90 @@
+---
+kind: pipeline
+name: publish
+
+clone:
+  depth: 1
+
+steps:
+- name: restore-bundle-cache
+  image: meltwater/drone-cache:latest
+  environment:
+    AWS_ACCESS_KEY_ID:
+      from_secret: CI_AWS_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY:
+      from_secret: CI_AWS_SECRET_ACCESS_KEY
+  settings:
+    restore: true
+    cache_key: '{{ checksum "Gemfile.lock" }}'
+    bucket: drone-ci-cache-bucket
+    region: ap-northeast-1
+    mount:
+      - 'vendor/bundle'
+
+- name: build
+  image: ruby:2-alpine
+  commands:
+  - apk add --no-cache build-base git
+  - gem install bundler:2.3.14
+  - bundle install -j4
+  - rake build
+
+- name: rebuild-bundle-cache
+  image: meltwater/drone-cache:latest
+  environment:
+    AWS_ACCESS_KEY_ID:
+      from_secret: CI_AWS_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY:
+      from_secret: CI_AWS_SECRET_ACCESS_KEY
+  settings:
+    rebuild: true
+    cache_key: '{{ checksum "Gemfile.lock" }}'
+    bucket: drone-ci-cache-bucket
+    region: ap-northeast-1
+    mount:
+      - 'vendor/bundle'
+  when:
+    status:
+    - success
+    - failure
+
+- name: deployment
+  image: ruby:alpine
+  environment:
+    PUSH_KEY:
+      from_secret: PUSH_KEY
+  commands:
+  - mkdir -p ~/.gem
+  - touch ~/.gem/credentials
+  - echo -e "$PUSH_KEY" > ~/.gem/credentials
+  - chmod 0600 ~/.gem/credentials
+  - gem push --key push_key --host https://gem.kabob.io/private pkg/*.gem
+
+trigger:
+  event:
+  - tag
+
+---
+kind: pipeline
+name: after
+
+clone:
+  disable: true
+
+steps:
+- name: notify
+  image: plugins/slack
+  settings:
+    icon_emoji: ":rocket:"
+    webhook:
+      from_secret: SLACK_WEBHOOK
+
+depends_on:
+- publish
+
+trigger:
+  event:
+  - tag
+  status:
+  - success
+  - failure

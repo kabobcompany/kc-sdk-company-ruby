@@ -18,7 +18,7 @@ Or install it yourself as:
 
     $ gem install kc-sdk-company
 
-For rails, create config `config/initializers/kc_sdk_app.rb`
+For rails, create config `config/initializers/kc_sdk_company.rb`
 
 ```ruby
 KcSdkCompany.configure do |config|

@@ -25,7 +25,7 @@ steps:
   image: ruby:2-alpine
   commands:
   - apk add --no-cache build-base git
-  - gem install bundler:2.3.14
+  - gem install bundler:2.3.21
   - bundle install -j4
   - rake build
 

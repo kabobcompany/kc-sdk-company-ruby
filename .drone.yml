@@ -58,7 +58,7 @@ steps:
   - touch ~/.gem/credentials
   - echo -e "$PUSH_KEY" > ~/.gem/credentials
   - chmod 0600 ~/.gem/credentials
-  - gem push --key push_key --host https://gem.kabob.io/private pkg/*.gem
+  - gem push --key push_key pkg/*.gem
 
 trigger:
   event:

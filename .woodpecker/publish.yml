@@ -1,0 +1,64 @@
+when:
+  - event: tag
+    ref: refs/tags/v*
+
+steps:
+  - name: restore-cache
+    image: plugins/cache
+    settings:
+      restore: true
+      cache_key: '{{ checksum "Gemfile.lock" }}'
+      bucket: woodpecker-ci
+      region: ap-northeast-1
+      mount:
+        - "vendor/bundle"
+
+  - name: build
+    image: ruby:3-alpine
+    commands:
+      - apk add --no-cache build-base git postgresql-dev yaml-dev zlib-dev
+      - gem install bundler:2.6.8
+      - bundle config set --local path 'vendor/bundle'
+      - bundle install -j4
+      - bundle exec rake build
+
+  - name: rebuild-cache
+    image: plugins/cache
+    settings:
+      rebuild: true
+      cache_key: '{{ checksum "Gemfile.lock" }}'
+      bucket: woodpecker-ci
+      region: ap-northeast-1
+      mount:
+        - "vendor/bundle"
+
+  - name: deployment
+    image: ruby:3-alpine
+    commands:
+      - apk add --no-cache aws-cli
+      - mkdir -p gem-repo/gems
+      - aws s3 sync s3://private-gem gem-repo --region ap-northeast-1
+      - cp pkg/*.gem gem-repo/gems/
+      - gem generate_index --directory gem-repo
+      - aws s3 sync gem-repo s3://private-gem --region ap-northeast-1 --delete
+
+  - name: notify-lark-success
+    image: ghcr.io/7a6163/ci-lark-notification
+    settings:
+      webhook_url:
+        from_secret: LARK_CD_WEBHOOK_URL
+      secret:
+        from_secret: LARK_CD_SECRET
+    when:
+      - status: success
+
+  - name: notify-lark-failure
+    image: ghcr.io/7a6163/ci-lark-notification
+    settings:
+      webhook_url:
+        from_secret: LARK_CD_WEBHOOK_URL
+      secret:
+        from_secret: LARK_CD_SECRET
+      status: failure
+    when:
+      - status: failure
